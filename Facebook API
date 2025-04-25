@@ -1,0 +1,46 @@
+import requests
+import pandas as pd
+import gspread
+from dotenv import load_dotenv
+import os
+from oauth2client.service_account import ServiceAccountCredentials
+
+# ===== Load Environment Variables =====
+load_dotenv()
+
+ACCESS_TOKEN = os.getenv("ACCESS_TOKEN")
+AD_ACCOUNT_ID = os.getenv("AD_ACCOUNT_ID")
+CREDS_PATH = os.getenv("CREDS_PATH")
+SPREADSHEET_ID = os.getenv("SPREADSHEET_ID")
+
+# ===== Facebook API Config =====
+FIELDS = ['campaign_name', 'adset_name', 'ad_name', 'spend', 'impressions', 'clicks', 'cpc', 'ctr']
+API_VERSION = 'v18.0'
+
+# Request Facebook Ads data for 2024
+url = f'https://graph.facebook.com/{API_VERSION}/{AD_ACCOUNT_ID}/insights'
+params = {
+    'access_token': ACCESS_TOKEN,
+    'fields': ','.join(FIELDS),
+    'level': 'ad',
+    'time_range': '{"since":"2024-01-01","until":"2024-12-31"}',
+    'limit': 1000
+}
+response = requests.get(url, params=params)
+data = response.json().get('data', [])
+
+# Convert to DataFrame
+df = pd.DataFrame(data)
+
+# ===== Google Sheets Auth & Upload =====
+SCOPE = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+creds = ServiceAccountCredentials.from_json_keyfile_name(CREDS_PATH, SCOPE)
+client = gspread.authorize(creds)
+
+# Upload to Sheet
+sheet = client.open_by_key(SPREADSHEET_ID)
+worksheet = sheet.get_worksheet(0)
+worksheet.clear()
+worksheet.update([df.columns.values.tolist()] + df.values.tolist())
+
+print("✅ Data uploaded to Google Sheets!")
